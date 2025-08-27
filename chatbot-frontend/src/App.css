@@ -1,3 +1,43 @@
+/* Handoff form improvements */
+.handoff-form {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  margin-top: 1.2rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.5rem;
+  background: rgba(255,255,255,0.7);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px #eee;
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  z-index: 2;
+}
+.handoff-form input {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  outline: none;
+  background: #f9f9f9;
+  box-shadow: 0 1px 4px #eee;
+}
+.handoff-form button {
+  padding: 0.7rem 1.2rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(90deg,#a8edea,#fed6e3);
+  color: #333;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #eee;
+  transition: background 0.2s;
+  white-space: nowrap;
+  margin-left: 0.5rem;
+}
 /* Typing indicator animated dots */
 .typing-indicator {
   display: flex;

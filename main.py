@@ -1,9 +1,29 @@
-from fastapi import FastAPI
+# ...existing code...
+from fastapi import FastAPI, Request
+import sqlite3
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 import sqlite3, os, re
 from dotenv import load_dotenv
 from transformers import pipeline
+
+app = FastAPI()
+
+# --------------------------
+# Support ticket endpoint
+# --------------------------
+@app.post("/support_ticket")
+async def support_ticket(request: Request):
+    data = await request.json()
+    email = data.get("email")
+    issue = data.get("issue")
+    con = sqlite3.connect("faq.db")
+    cur = con.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS support_tickets (id INTEGER PRIMARY KEY, email TEXT, issue TEXT)")
+    cur.execute("INSERT INTO support_tickets (email, issue) VALUES (?, ?)", (email, issue))
+    con.commit()
+    con.close()
+    return {"status": "success"}
 
 # Load environment variables (from .env file)
 load_dotenv()
@@ -16,10 +36,9 @@ if os.getenv("OPENAI_API_KEY"):
 # Hugging Face fallback model (DialoGPT-small for chat)
 qa_model = pipeline("text-generation", model="microsoft/DialoGPT-small")
 
+
 # Keep one chat history for fallback model
 # chat_history = Conversation()
-
-app = FastAPI()
 
 # ✅ CORS middleware
 app.add_middleware(
@@ -145,7 +164,17 @@ def ask(question: str):
     import re
     q = re.sub(r'[^a-zA-Z0-9 ]', '', question.strip().lower())
 
-    # 0. Custom professional responses (partial match)
+
+    # 0. Handoff trigger: if user asks for a human, trigger handoff
+    handoff_phrases = [
+        "speak to a human", "talk to a human", "real person", "human agent", "customer service rep", "connect me to a human", "need a human"
+    ]
+    for phrase in handoff_phrases:
+        if phrase in q:
+            print(f"Handoff triggered for phrase: {phrase}")
+            return {"question": question, "answer": "I'm unable to assist further. Please provide your email and issue so we can connect you to a human agent."}
+
+    # 1. Custom professional responses (partial match)
     custom_responses = {
         "hello": "Hi there! How can I help you today?",
         "can you help": "Absolutely! Please tell me more about your issue.",

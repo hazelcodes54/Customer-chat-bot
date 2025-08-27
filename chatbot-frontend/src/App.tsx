@@ -13,6 +13,12 @@ const TypingIndicator = () => (
 
 
 function App() {
+  // Utility: check if bot response is a handoff
+  function isHandoff(response: string) {
+    return response && response.toLowerCase().includes("connect you to a human agent")
+      || response.toLowerCase().includes("please provide your email")
+      || response.toLowerCase().includes("unable to assist further");
+  }
   const [messages, setMessages] = useState<{ role: string; text: string; timestamp: string }[]>(() => {
     const saved = sessionStorage.getItem("chatbot_messages");
     return saved ? JSON.parse(saved) : [];
@@ -21,6 +27,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const lastMsgRef = useRef<HTMLDivElement>(null);
+
+  // Handoff state
+  const [handoffActive, setHandoffActive] = useState(false);
+  const [handoffError, setHandoffError] = useState<string>("");
+  const [handoffEmail, setHandoffEmail] = useState("");
+  const [handoffIssue, setHandoffIssue] = useState("");
+  const [handoffSent, setHandoffSent] = useState(false);
 
   // Save messages to sessionStorage whenever they change
   useEffect(() => {
@@ -48,6 +61,10 @@ function App() {
       );
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "bot", text: data.answer, timestamp: getTimestamp() }]);
+      // If bot triggers handoff, show form
+      if (isHandoff(data.answer)) {
+        setHandoffActive(true);
+      }
     } catch (error) {
       setMessages((prev) => [
         ...prev,
@@ -56,6 +73,28 @@ function App() {
     }
     setLoading(false);
     setInput("");
+  };
+
+  // Submit handoff form
+  const submitHandoff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setHandoffSent(false);
+    try {
+      const res = await fetch("http://127.0.0.1:8000/support_ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: handoffEmail, issue: handoffIssue })
+      });
+      if (res.ok) {
+        setHandoffSent(true);
+        setHandoffActive(false);
+  setMessages((prev) => [...prev, { role: "bot", text: "Thank you! Your message has been received. A human agent will contact you soon.", timestamp: getTimestamp() }]);
+        setHandoffEmail("");
+        setHandoffIssue("");
+      }
+    } catch {
+      setMessages((prev) => [...prev, { role: "bot", text: "Sorry, there was an error logging your issue.", timestamp: getTimestamp() }]);
+    }
   };
 
   // Styles
@@ -226,24 +265,52 @@ function App() {
             </div>
           )}
         </div>
-        <form
-          style={inputArea}
-          onSubmit={e => {
-            e.preventDefault();
-            sendMessage();
-          }}
-        >
-          <input
-            style={inputStyle}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            placeholder="Type your question..."
-            autoFocus
-          />
-          <button style={buttonStyle} type="submit">
-            <span role="img" aria-label="send">📤</span>
-          </button>
-        </form>
+        {handoffActive ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '1rem' }}>
+            <form className="handoff-form" onSubmit={submitHandoff} style={{ width: '100%', maxWidth: 260, display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '0.7rem 0.5rem', borderRadius: '12px', boxShadow: '0 1px 6px rgba(0,0,0,0.04)' }}>
+              <input
+                type="email"
+                value={handoffEmail}
+                onChange={e => setHandoffEmail(e.target.value)}
+                placeholder="Email"
+                required
+                style={{ fontSize: '0.95rem', padding: '0.4rem', borderRadius: '6px', border: '1px solid #cce', marginBottom: '0.3rem' }}
+              />
+              <input
+                value={handoffIssue}
+                onChange={e => setHandoffIssue(e.target.value)}
+                placeholder="Issue"
+                required
+                style={{ fontSize: '0.95rem', padding: '0.4rem', borderRadius: '6px', border: '1px solid #cce', marginBottom: '0.3rem' }}
+              />
+              <button type="submit" style={{ fontSize: '1rem', padding: '0.4rem', borderRadius: '6px', background: 'linear-gradient(90deg,#b2f7ef,#fbc2eb)', color: '#333', fontWeight: 600, border: 'none', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>Submit Ticket</button>
+            </form>
+            {handoffError && (
+              <div style={{ color: '#d33', marginTop: '0.3rem', textAlign: 'center', fontWeight: 500, fontSize: '0.95rem' }}>
+                {handoffError}
+              </div>
+            )}
+          </div>
+        ) : (
+          <form
+            style={inputArea}
+            onSubmit={e => {
+              e.preventDefault();
+              sendMessage();
+            }}
+          >
+            <input
+              style={inputStyle}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Type your question..."
+              autoFocus
+            />
+            <button style={buttonStyle} type="submit">
+              <span role="img" aria-label="send">📤</span>
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
