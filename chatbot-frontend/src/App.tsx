@@ -1,9 +1,20 @@
+
 import React, { useState, useRef, useEffect } from "react";
+import './App.css';
+
+// Typing indicator component
+const TypingIndicator = () => (
+  <div className="typing-indicator">
+    <span className="dot" />
+    <span className="dot" />
+    <span className="dot" />
+  </div>
+);
 
 
 function App() {
-  const [messages, setMessages] = useState<{ role: string; text: string }[]>(() => {
-    const saved = localStorage.getItem("chatbot_messages");
+  const [messages, setMessages] = useState<{ role: string; text: string; timestamp: string }[]>(() => {
+    const saved = sessionStorage.getItem("chatbot_messages");
     return saved ? JSON.parse(saved) : [];
   });
   const [input, setInput] = useState("");
@@ -11,9 +22,9 @@ function App() {
   const chatRef = useRef<HTMLDivElement>(null);
   const lastMsgRef = useRef<HTMLDivElement>(null);
 
-  // Save messages to localStorage whenever they change
+  // Save messages to sessionStorage whenever they change
   useEffect(() => {
-    localStorage.setItem("chatbot_messages", JSON.stringify(messages));
+    sessionStorage.setItem("chatbot_messages", JSON.stringify(messages));
   }, [messages]);
 
   useEffect(() => {
@@ -22,20 +33,25 @@ function App() {
     }
   }, [messages, loading]);
 
+  const getTimestamp = () => {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   const sendMessage = async () => {
     if (!input.trim()) return;
-    setMessages((prev) => [...prev, { role: "user", text: input }]);
+    setMessages((prev) => [...prev, { role: "user", text: input, timestamp: getTimestamp() }]);
     setLoading(true);
     try {
       const res = await fetch(
         `http://127.0.0.1:8000/ask?question=${encodeURIComponent(input)}`
       );
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "bot", text: data.answer }]);
+      setMessages((prev) => [...prev, { role: "bot", text: data.answer, timestamp: getTimestamp() }]);
     } catch (error) {
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: "⚠️ Error: could not reach server." },
+        { role: "bot", text: "⚠️ Error: could not reach server.", timestamp: getTimestamp() },
       ]);
     }
     setLoading(false);
@@ -141,12 +157,37 @@ function App() {
     boxShadow: "0 1px 4px #ccc",
   };
 
+  // Clear chat handler
+  const handleClearChat = () => {
+    sessionStorage.removeItem("chatbot_messages");
+    setMessages([]);
+  };
+
   return (
     <div style={bgGradient}>
       <div style={glassBox}>
         <div style={headerStyle}>
           <span role="img" aria-label="chat">💬</span> Customer Support Chatbot
         </div>
+        <button
+          style={{
+            marginBottom: "1rem",
+            alignSelf: "flex-end",
+            padding: "0.4rem 1rem",
+            borderRadius: "999px",
+            border: "none",
+            background: "#fed6e3",
+            color: "#333",
+            fontWeight: 500,
+            fontSize: "0.95rem",
+            cursor: "pointer",
+            boxShadow: "0 1px 4px #eee",
+            transition: "background 0.2s",
+          }}
+          onClick={handleClearChat}
+        >
+          🗑️ Clear Chat
+        </button>
         <div style={chatWindow} ref={chatRef}>
           {messages.length === 0 && (
             <div style={{ textAlign: "center", color: "#888", marginTop: "2rem" }}>
@@ -160,20 +201,28 @@ function App() {
                 key={i}
                 style={bubbleStyle(msg.role)}
                 ref={isLast ? lastMsgRef : undefined}
+                className="chat-bubble-animate"
               >
                 <div style={avatarStyle}>
-                  {msg.role === "user" ? "🧑" : "🤖"}
+                  {msg.role === "user" ? "🧑" : (
+                    <img src="/bot-avatar.svg" alt="Bot Avatar" style={{ width: "32px", height: "32px" }} />
+                  )}
                 </div>
                 <div>
                   {msg.text}
+                  <div style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.2rem", textAlign: msg.role === "user" ? "right" : "left" }}>
+                    {msg.timestamp}
+                  </div>
                 </div>
               </div>
             );
           })}
           {loading && (
             <div style={bubbleStyle("bot")} ref={lastMsgRef}>
-              <div style={avatarStyle}>🤖</div>
-              <div style={{ fontStyle: "italic", color: "#aaa" }}>...</div>
+              <div style={avatarStyle}>
+                <img src="/bot-avatar.svg" alt="Bot Avatar" style={{ width: "32px", height: "32px" }} />
+              </div>
+              <TypingIndicator />
             </div>
           )}
         </div>
