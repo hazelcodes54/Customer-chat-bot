@@ -1,3 +1,12 @@
+# --------------------------
+# Analytics logging
+# --------------------------
+import collections
+analytics = {
+    "conversation_count": 0,
+    "faq_hits": collections.Counter()
+}
+
 # ...existing code...
 from fastapi import FastAPI, Request
 import sqlite3
@@ -150,7 +159,13 @@ def ask_ai(prompt: str):
 
 @app.get("/")
 def home():
-    return {"message": "Hello, chatbot backend is running!"}
+    # Show analytics summary on home endpoint
+    top_faqs = analytics["faq_hits"].most_common(5)
+    return {
+        "message": "Hello, chatbot backend is running!",
+        "conversation_count": analytics["conversation_count"],
+        "top_faqs": top_faqs
+    }
 
 
 # --------------------------
@@ -159,6 +174,9 @@ def home():
 
 @app.get("/ask")
 def ask(question: str):
+    # Track new conversation (if user says hello or similar)
+    if any(greet in question.lower() for greet in ["hello", "hi", "hey"]):
+        analytics["conversation_count"] += 1
     import time
     print(f"Received question: {question}")
     import re
@@ -196,6 +214,7 @@ def ask(question: str):
     answer = get_answer(question)
     if answer:
         print("FAQ match found.")
+        analytics["faq_hits"][question.strip().lower()] += 1
         return {"question": question, "answer": answer}
 
     # 2. Try order tracking (look for SHxxx pattern)
