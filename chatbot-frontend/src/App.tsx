@@ -36,6 +36,20 @@ function App() {
   const [handoffSent, setHandoffSent] = useState(false);
 
   // Save messages to sessionStorage whenever they change
+
+  // Add welcome message on initial load
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([
+        {
+          role: "bot",
+          text: "👋 Welcome! I'm your customer support assistant. How can I help you today?",
+          timestamp: getTimestamp()
+        }
+      ]);
+    }
+  }, []);
+
   useEffect(() => {
     sessionStorage.setItem("chatbot_messages", JSON.stringify(messages));
   }, [messages]);
