@@ -24,6 +24,14 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [input, setInput] = useState("");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // Emoji list (simple set)
+  const emojis = ["😀", "😂", "😍", "😎", "👍", "🙏", "🎉", "😢", "🤔", "🙌", "🔥", "🥳", "💡", "🚀"];
+
+  const handleEmojiClick = (emoji: string) => {
+    setInput(input + emoji);
+    setShowEmojiPicker(false);
+  };
   const [loading, setLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const lastMsgRef = useRef<HTMLDivElement>(null);
@@ -320,9 +328,31 @@ function App() {
               placeholder="Type your question..."
               autoFocus
             />
+            <button
+              type="button"
+              style={{ ...buttonStyle, padding: "0.7rem", fontSize: "1.2rem" }}
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              aria-label="Pick emoji"
+            >
+              😊
+            </button>
             <button style={buttonStyle} type="submit">
               <span role="img" aria-label="send">📤</span>
             </button>
+            {showEmojiPicker && (
+              <div style={{ position: "absolute", bottom: "3.5rem", left: 0, background: "#fff", border: "1px solid #eee", borderRadius: "10px", boxShadow: "0 2px 8px #eee", padding: "0.5rem", display: "flex", gap: "0.3rem", zIndex: 10 }}>
+                {emojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    style={{ fontSize: "1.3rem", background: "none", border: "none", cursor: "pointer" }}
+                    onClick={() => handleEmojiClick(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
           </form>
         )}
       </div>
