@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import './App.css';
 
@@ -11,7 +10,6 @@ const TypingIndicator = () => (
   </div>
 );
 
-
 function App() {
   // Utility: check if bot response is a handoff
   function isHandoff(response: string) {
@@ -23,6 +21,12 @@ function App() {
     const saved = sessionStorage.getItem("chatbot_messages");
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Clear chat handler
+  const handleClearChat = () => {
+    sessionStorage.removeItem("chatbot_messages");
+    setMessages([]);
+  };
   const [input, setInput] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   // Emoji list (simple set)
@@ -42,8 +46,6 @@ function App() {
   const [handoffEmail, setHandoffEmail] = useState("");
   const [handoffIssue, setHandoffIssue] = useState("");
   const [handoffSent, setHandoffSent] = useState(false);
-
-  // Save messages to sessionStorage whenever they change
 
   // Add welcome message on initial load
   useEffect(() => {
@@ -110,7 +112,7 @@ function App() {
       if (res.ok) {
         setHandoffSent(true);
         setHandoffActive(false);
-  setMessages((prev) => [...prev, { role: "bot", text: "Thank you! Your message has been received. A human agent will contact you soon.", timestamp: getTimestamp() }]);
+        setMessages((prev) => [...prev, { role: "bot", text: "Thank you! Your message has been received. A human agent will contact you soon.", timestamp: getTimestamp() }]);
         setHandoffEmail("");
         setHandoffIssue("");
       }
@@ -218,10 +220,19 @@ function App() {
     boxShadow: "0 1px 4px #ccc",
   };
 
-  // Clear chat handler
-  const handleClearChat = () => {
-    sessionStorage.removeItem("chatbot_messages");
-    setMessages([]);
+
+  // Export chat handler
+  const handleExportChat = () => {
+    const chatText = messages.map(m => `${m.role === "user" ? "You" : "Bot"} (${m.timestamp}):\n${m.text}\n`).join("\n");
+    const blob = new Blob([chatText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "chat_history.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -230,25 +241,42 @@ function App() {
         <div style={headerStyle}>
           <span role="img" aria-label="chat">💬</span> Customer Support Chatbot
         </div>
-        <button
-          style={{
-            marginBottom: "1rem",
-            alignSelf: "flex-end",
-            padding: "0.4rem 1rem",
-            borderRadius: "999px",
-            border: "none",
-            background: "#fed6e3",
-            color: "#333",
-            fontWeight: 500,
-            fontSize: "0.95rem",
-            cursor: "pointer",
-            boxShadow: "0 1px 4px #eee",
-            transition: "background 0.2s",
-          }}
-          onClick={handleClearChat}
-        >
-          🗑️ Clear Chat
-        </button>
+        <div style={{ display: "flex", gap: "0.7rem", marginBottom: "1rem", justifyContent: "center", alignItems: "center" }}>
+          <button
+            style={{
+              padding: "0.4rem 1rem",
+              borderRadius: "999px",
+              border: "none",
+              background: "#fed6e3",
+              color: "#333",
+              fontWeight: 500,
+              fontSize: "0.95rem",
+              cursor: "pointer",
+              boxShadow: "0 1px 4px #eee",
+              transition: "background 0.2s",
+            }}
+            onClick={handleClearChat}
+          >
+            🗑️ Clear Chat
+          </button>
+          <button
+            style={{
+              padding: "0.4rem 1rem",
+              borderRadius: "999px",
+              border: "none",
+              background: "#a8edea",
+              color: "#333",
+              fontWeight: 500,
+              fontSize: "0.95rem",
+              cursor: "pointer",
+              boxShadow: "0 1px 4px #eee",
+              transition: "background 0.2s",
+            }}
+            onClick={handleExportChat}
+          >
+            📄 Export Chat
+          </button>
+        </div>
         <div style={chatWindow} ref={chatRef}>
           {messages.length === 0 && (
             <div style={{ textAlign: "center", color: "#888", marginTop: "2rem" }}>
