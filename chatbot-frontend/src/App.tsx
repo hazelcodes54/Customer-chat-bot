@@ -11,6 +11,17 @@ const TypingIndicator = () => (
 );
 
 function App() {
+  // Dark mode state
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem("darkMode");
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Save dark mode preference
+  useEffect(() => {
+    localStorage.setItem("darkMode", JSON.stringify(isDarkMode));
+  }, [isDarkMode]);
+
   // Utility: check if bot response is a handoff
   function isHandoff(response: string) {
     return response && response.toLowerCase().includes("connect you to a human agent")
@@ -75,6 +86,7 @@ function App() {
     return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Order tracking: show more details if available
   const sendMessage = async () => {
     if (!input.trim()) return;
     setMessages((prev) => [...prev, { role: "user", text: input, timestamp: getTimestamp() }]);
@@ -84,7 +96,14 @@ function App() {
         `http://127.0.0.1:8000/ask?question=${encodeURIComponent(input)}`
       );
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "bot", text: data.answer, timestamp: getTimestamp() }]);
+      // If the response contains order details, format them nicely
+      if (data.order) {
+        const order = data.order;
+        const orderDetails = `Order ${order.id}\nStatus: ${order.status}\nCustomer: ${order.customer_name}\nItems: ${order.items}\nTotal: $${order.total_price}\nShipping: ${order.shipping_address}\nDate: ${order.created_at}`;
+        setMessages((prev) => [...prev, { role: "bot", text: orderDetails, timestamp: getTimestamp() }]);
+      } else {
+        setMessages((prev) => [...prev, { role: "bot", text: data.answer, timestamp: getTimestamp() }]);
+      }
       // If bot triggers handoff, show form
       if (isHandoff(data.answer)) {
         setHandoffActive(true);
@@ -124,7 +143,9 @@ function App() {
   // Styles
   const bgGradient = {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
+    background: isDarkMode 
+      ? "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)"
+      : "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -133,10 +154,16 @@ function App() {
     width: "100%",
     maxWidth: "420px",
     minHeight: "520px",
-    background: "rgba(255,255,255,0.7)",
-    boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
+    background: isDarkMode 
+      ? "rgba(30, 30, 30, 0.8)"
+      : "rgba(255, 255, 255, 0.7)",
+    boxShadow: isDarkMode
+      ? "0 8px 32px 0 rgba(0, 0, 0, 0.37)"
+      : "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
     borderRadius: "20px",
-    border: "1px solid rgba(255,255,255,0.18)",
+    border: isDarkMode
+      ? "1px solid rgba(255,255,255,0.1)"
+      : "1px solid rgba(255,255,255,0.18)",
     padding: "2rem 1.5rem 1rem 1.5rem",
     display: "flex",
     flexDirection: "column" as const,
@@ -147,9 +174,11 @@ function App() {
     fontSize: "2rem",
     fontWeight: 700,
     marginBottom: "1.2rem",
-    color: "#333",
+    color: isDarkMode ? "#fff" : "#333",
     letterSpacing: "1px",
-    textShadow: "0 2px 8px #fff8",
+    textShadow: isDarkMode 
+      ? "0 2px 8px rgba(0,0,0,0.5)"
+      : "0 2px 8px #fff8",
   };
   const chatWindow = {
     flex: 1,
@@ -159,10 +188,16 @@ function App() {
     display: "flex",
     flexDirection: "column" as const,
     gap: "0.7rem",
-    background: "rgba(255,255,255,0.5)",
+    background: isDarkMode 
+      ? "rgba(40, 40, 40, 0.5)"
+      : "rgba(255, 255, 255, 0.5)",
     borderRadius: "12px",
-    border: "1px solid #e0e0e0",
-    boxShadow: "0 2px 8px #eee",
+    border: isDarkMode
+      ? "1px solid #404040"
+      : "1px solid #e0e0e0",
+    boxShadow: isDarkMode
+      ? "0 2px 8px rgba(0,0,0,0.2)"
+      : "0 2px 8px #eee",
   };
   const inputArea = {
     display: "flex",
@@ -174,33 +209,50 @@ function App() {
     flex: 1,
     padding: "0.7rem 1rem",
     borderRadius: "999px",
-    border: "1px solid #ccc",
+    border: isDarkMode
+      ? "1px solid #404040"
+      : "1px solid #ccc",
     fontSize: "1rem",
     outline: "none",
-    background: "#f9f9f9",
-    boxShadow: "0 1px 4px #eee",
+    background: isDarkMode ? "#2d2d2d" : "#f9f9f9",
+    color: isDarkMode ? "#fff" : "#333",
+    boxShadow: isDarkMode
+      ? "0 1px 4px rgba(0,0,0,0.2)"
+      : "0 1px 4px #eee",
   };
   const buttonStyle = {
     padding: "0.7rem 1.2rem",
     borderRadius: "999px",
     border: "none",
-    background: "linear-gradient(90deg,#a8edea,#fed6e3)",
-    color: "#333",
+    background: isDarkMode
+      ? "linear-gradient(90deg,#2d2d2d,#404040)"
+      : "linear-gradient(90deg,#a8edea,#fed6e3)",
+    color: isDarkMode ? "#fff" : "#333",
     fontWeight: 600,
     fontSize: "1rem",
     cursor: "pointer",
-    boxShadow: "0 2px 8px #eee",
+    boxShadow: isDarkMode
+      ? "0 2px 8px rgba(0,0,0,0.2)"
+      : "0 2px 8px #eee",
     transition: "background 0.2s",
   };
   const bubbleStyle = (role: string) => ({
     alignSelf: role === "user" ? "flex-end" : "flex-start",
-    background: role === "user"
-      ? "linear-gradient(135deg,#a8edea 60%,#fed6e3 100%)"
-      : "#fff",
-    color: "#333",
+    background: isDarkMode
+      ? (role === "user"
+        ? "linear-gradient(135deg,#404040 60%,#2d2d2d 100%)"
+        : "linear-gradient(135deg, #2b2f3a 0%, #1e2127 100%)")
+      : (role === "user"
+        ? "linear-gradient(135deg,#a8edea 60%,#fed6e3 100%)"
+        : "#fff"),
+    color: isDarkMode ? "#fff" : "#333",
     padding: "0.8rem 1.2rem",
     borderRadius: role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-    boxShadow: "0 2px 8px #e0e0e0",
+    boxShadow: isDarkMode
+      ? (role === "bot" 
+        ? "0 4px 12px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.1)"
+        : "0 2px 8px rgba(0,0,0,0.2)")
+      : "0 2px 8px #e0e0e0",
     maxWidth: "80%",
     position: "relative" as const,
     fontSize: "1.05rem",
@@ -212,12 +264,15 @@ function App() {
     width: "32px",
     height: "32px",
     borderRadius: "50%",
-    background: "#eee",
+    background: isDarkMode ? "linear-gradient(135deg, #3a3f4c 0%, #2b2f3a 100%)" : "#eee",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontSize: "1.3rem",
-    boxShadow: "0 1px 4px #ccc",
+    boxShadow: isDarkMode
+      ? "0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.1)"
+      : "0 1px 4px #ccc",
+    border: isDarkMode ? "2px solid rgba(255,255,255,0.1)" : "none",
   };
 
 
@@ -275,6 +330,25 @@ function App() {
             onClick={handleExportChat}
           >
             📄 Export Chat
+          </button>
+          <button
+            style={{
+              padding: "0.4rem 1rem",
+              borderRadius: "999px",
+              border: "none",
+              background: isDarkMode ? "#2d2d2d" : "#fff",
+              color: isDarkMode ? "#fff" : "#333",
+              fontWeight: 500,
+              fontSize: "0.95rem",
+              cursor: "pointer",
+              boxShadow: isDarkMode
+                ? "0 1px 4px rgba(0,0,0,0.2)"
+                : "0 1px 4px #eee",
+              transition: "background 0.2s",
+            }}
+            onClick={() => setIsDarkMode(!isDarkMode)}
+          >
+            {isDarkMode ? "🌞 Light" : "🌙 Dark"}
           </button>
         </div>
         <div style={chatWindow} ref={chatRef}>
