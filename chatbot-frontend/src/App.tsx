@@ -28,10 +28,187 @@ function App() {
       || response.toLowerCase().includes("please provide your email")
       || response.toLowerCase().includes("unable to assist further");
   }
-  const [messages, setMessages] = useState<{ role: string; text: string; timestamp: string }[]>(() => {
+  // TypeScript definitions for Web Speech API
+  interface SpeechRecognitionEvent extends Event {
+    results: SpeechRecognitionResultList;
+  }
+
+  interface SpeechRecognitionResultList {
+    [index: number]: SpeechRecognitionResult;
+    length: number;
+  }
+
+  interface SpeechRecognitionResult {
+    [index: number]: SpeechRecognitionAlternative;
+    length: number;
+    isFinal: boolean;
+  }
+
+  interface SpeechRecognitionAlternative {
+    transcript: string;
+    confidence: number;
+  }
+
+  interface SpeechRecognitionErrorEvent extends Event {
+    error: string;
+  }
+
+  interface SpeechRecognition extends EventTarget {
+    continuous: boolean;
+    interimResults: boolean;
+    start(): void;
+    stop(): void;
+    onresult: (event: SpeechRecognitionEvent) => void;
+    onerror: (event: SpeechRecognitionErrorEvent) => void;
+  }
+
+  interface Window {
+    SpeechRecognition?: {
+      new (): SpeechRecognition;
+    };
+    webkitSpeechRecognition?: {
+      new (): SpeechRecognition;
+    };
+  }
+
+  interface Message {
+    role: string;
+    text: string;
+    timestamp: string;
+    audioUrl?: string;
+  }
+
+  const [messages, setMessages] = useState<Message[]>(() => {
     const saved = sessionStorage.getItem("chatbot_messages");
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Voice recording states
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  // Voice recording handlers
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        const audioUrl = URL.createObjectURL(blob);
+        setMessages(prev => [...prev, {
+          role: 'user',
+          text: '🎤 Voice Message',
+          timestamp: getTimestamp(),
+          audioUrl
+        }]);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      alert('Could not access microphone. Please check your permissions.');
+    }
+  };
+
+  const processVoiceMessage = async (audioBlob: Blob) => {
+    try {
+      // Convert audio to text using Web Speech API
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      // Create a new SpeechRecognition instance
+      const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognitionClass() as SpeechRecognition;
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      
+      recognition.onresult = async (event: SpeechRecognitionEvent) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('Transcribed text:', transcript);
+        
+        // Add voice message with transcription
+        setMessages(prev => [...prev, {
+          role: 'user',
+          text: `🎤 "${transcript}"`,
+          timestamp: getTimestamp(),
+          audioUrl: audioUrl
+        }]);
+
+        // Get bot's response
+        setLoading(true);
+        try {
+          const res = await fetch(
+            `http://127.0.0.1:8000/ask?question=${encodeURIComponent(transcript)}`
+          );
+          const data = await res.json();
+          
+          if (data.order) {
+            const order = data.order;
+            const orderDetails = `Order ${order.id}\nStatus: ${order.status}\nCustomer: ${order.customer_name}\nItems: ${order.items}\nTotal: $${order.total_price}\nShipping: ${order.shipping_address}\nDate: ${order.created_at}`;
+            setMessages((prev) => [...prev, { role: "bot", text: orderDetails, timestamp: getTimestamp() }]);
+          } else {
+            setMessages((prev) => [...prev, { role: "bot", text: data.answer, timestamp: getTimestamp() }]);
+          }
+          
+          if (isHandoff(data.answer)) {
+            setHandoffActive(true);
+          }
+        } catch (error) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "bot", text: "⚠️ Error: could not reach server.", timestamp: getTimestamp() },
+          ]);
+        }
+        setLoading(false);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setMessages(prev => [...prev, {
+          role: 'user',
+          text: '🎤 Voice Message (Transcription failed)',
+          timestamp: getTimestamp(),
+          audioUrl: audioUrl
+        }]);
+      };
+
+      // Start recognition with the audio file
+      audio.onended = () => recognition.stop();
+      recognition.start();
+      audio.play();
+
+    } catch (err) {
+      console.error('Error processing voice message:', err);
+      alert('Error processing voice message. Please try again.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+
+      // Process the voice message once recording stops
+      if (chunksRef.current.length > 0) {
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        processVoiceMessage(audioBlob);
+      }
+    }
+  };
 
   // Clear chat handler
   const handleClearChat = () => {
@@ -371,8 +548,29 @@ function App() {
                     <img src="/bot-avatar.svg" alt="Bot Avatar" style={{ width: "32px", height: "32px" }} />
                   )}
                 </div>
-                <div>
+                <div style={{ width: "100%" }}>
                   {msg.text}
+                  {msg.audioUrl && (
+                    <div style={{ 
+                      marginTop: "0.5rem",
+                      background: isDarkMode ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.5)",
+                      padding: "0.5rem",
+                      borderRadius: "8px",
+                      boxShadow: isDarkMode 
+                        ? "inset 0 0 0 1px rgba(255,255,255,0.1)"
+                        : "inset 0 0 0 1px rgba(0,0,0,0.1)"
+                    }}>
+                      <audio 
+                        controls 
+                        src={msg.audioUrl}
+                        style={{ 
+                          width: "100%",
+                          height: "32px",
+                          filter: isDarkMode ? "invert(1)" : "none"
+                        }}
+                      />
+                    </div>
+                  )}
                   <div style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.2rem", textAlign: msg.role === "user" ? "right" : "left" }}>
                     {msg.timestamp}
                   </div>
@@ -437,6 +635,22 @@ function App() {
               aria-label="Pick emoji"
             >
               😊
+            </button>
+            <button 
+              type="button"
+              style={{
+                ...buttonStyle,
+                padding: "0.7rem",
+                background: isRecording
+                  ? "linear-gradient(90deg, #ff6b6b, #ff8787)"
+                  : buttonStyle.background
+              }}
+              onClick={isRecording ? stopRecording : startRecording}
+              aria-label={isRecording ? "Stop recording" : "Start recording"}
+            >
+              <span role="img" aria-label="microphone">
+                {isRecording ? "⏹️" : "🎤"}
+              </span>
             </button>
             <button style={buttonStyle} type="submit">
               <span role="img" aria-label="send">📤</span>
