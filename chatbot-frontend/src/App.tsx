@@ -548,7 +548,62 @@ function App() {
                     <img src="/bot-avatar.svg" alt="Bot Avatar" style={{ width: "32px", height: "32px" }} />
                   )}
                 </div>
-                <div style={{ width: "100%" }}>
+                <div style={{ width: "100%", position: "relative" }}>
+                  <div style={{ 
+                    position: "absolute", 
+                    right: msg.role === "user" ? "-30px" : "auto",
+                    left: msg.role === "bot" ? "-30px" : "auto",
+                    top: "0",
+                    cursor: "pointer",
+                    padding: "4px",
+                    borderRadius: "50%",
+                    background: isDarkMode ? "rgba(40, 40, 40, 0.8)" : "rgba(255, 255, 255, 0.8)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: isDarkMode 
+                      ? "0 2px 4px rgba(0,0,0,0.2)"
+                      : "0 2px 4px rgba(0,0,0,0.1)"
+                  }}
+                    onClick={() => {
+                      const text = msg.text;
+                      const shareData = {
+                        title: 'Customer Support Chat',
+                        text: `${text}\n\nShared from Customer Support Chatbot`,
+                        url: window.location.href
+                      };
+
+                      if (navigator.share && navigator.canShare(shareData)) {
+                        navigator.share(shareData)
+                          .catch((error) => console.log('Error sharing:', error));
+                      } else {
+                        // Fallback for desktop or browsers without Web Share API
+                        const platforms = {
+                          Twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareData.text)}&url=${encodeURIComponent(shareData.url)}`,
+                          Facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareData.url)}&quote=${encodeURIComponent(shareData.text)}`,
+                          LinkedIn: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareData.url)}`
+                        };
+                        
+                        // Open in a new window
+                        const width = 550;
+                        const height = 400;
+                        const left = (window.innerWidth - width) / 2;
+                        const top = (window.innerHeight - height) / 2;
+                        
+                        // Let user choose platform
+                        const platform = prompt("Choose a platform to share on (Twitter, Facebook, LinkedIn):");
+                        if (platform && platforms[platform as keyof typeof platforms]) {
+                          window.open(
+                            platforms[platform as keyof typeof platforms],
+                            'share',
+                            `width=${width},height=${height},left=${left},top=${top}`
+                          );
+                        }
+                      }
+                    }}
+                  >
+                    <span role="img" aria-label="share" style={{ fontSize: "14px" }}>📤</span>
+                  </div>
                   {msg.text}
                   {msg.audioUrl && (
                     <div style={{ 
