@@ -16,6 +16,12 @@ function App() {
     const saved = localStorage.getItem("darkMode");
     return saved ? JSON.parse(saved) : false;
   });
+  
+  // Language state
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    const saved = localStorage.getItem("selectedLanguage");
+    return saved || navigator.language.split('-')[0] || 'en';
+  });
 
   // Save dark mode preference
   useEffect(() => {
@@ -76,7 +82,25 @@ function App() {
     text: string;
     timestamp: string;
     audioUrl?: string;
+    language?: string;
   }
+
+  // Supported languages
+  const languages = {
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'it': 'Italian',
+    'pt': 'Portuguese',
+    'nl': 'Dutch',
+    'ru': 'Russian',
+    'zh': 'Chinese',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'ar': 'Arabic',
+    'hi': 'Hindi'
+  };
 
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = sessionStorage.getItem("chatbot_messages");
@@ -217,6 +241,7 @@ function App() {
   };
   const [input, setInput] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   // Emoji list (simple set)
   const emojis = ["😀", "😂", "😍", "😎", "👍", "🙏", "🎉", "😢", "🤔", "🙌", "🔥", "🥳", "💡", "🚀"];
 
@@ -258,6 +283,24 @@ function App() {
     }
   }, [messages, loading]);
 
+  // Close pickers when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showEmojiPicker || showLanguagePicker) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.emoji-picker') && !target.closest('.language-picker')) {
+          setShowEmojiPicker(false);
+          setShowLanguagePicker(false);
+        }
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showEmojiPicker, showLanguagePicker]);
+
   const getTimestamp = () => {
     const now = new Date();
     return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -270,7 +313,7 @@ function App() {
     setLoading(true);
     try {
       const res = await fetch(
-        `http://127.0.0.1:8000/ask?question=${encodeURIComponent(input)}`
+        `http://127.0.0.1:8000/ask?question=${encodeURIComponent(input)}&target_lang=${selectedLanguage}`
       );
       const data = await res.json();
       // If the response contains order details, format them nicely
@@ -398,20 +441,21 @@ function App() {
       : "0 1px 4px #eee",
   };
   const buttonStyle = {
-    padding: "0.7rem 1.2rem",
+    padding: "0.5rem",
+    width: "2.5rem",
     borderRadius: "999px",
     border: "none",
-    background: isDarkMode
-      ? "linear-gradient(90deg,#2d2d2d,#404040)"
-      : "linear-gradient(90deg,#a8edea,#fed6e3)",
+    background: isDarkMode 
+      ? "linear-gradient(135deg, #2d2d2d, #404040)"
+      : "linear-gradient(135deg, #fed6e3, #a8edea)",
     color: isDarkMode ? "#fff" : "#333",
     fontWeight: 600,
     fontSize: "1rem",
     cursor: "pointer",
     boxShadow: isDarkMode
-      ? "0 2px 8px rgba(0,0,0,0.2)"
-      : "0 2px 8px #eee",
-    transition: "background 0.2s",
+      ? "0 4px 12px rgba(0,0,0,0.2)"
+      : "0 4px 12px rgba(0,0,0,0.1)",
+    transition: "all 0.3s ease",
   };
   const bubbleStyle = (role: string) => ({
     alignSelf: role === "user" ? "flex-end" : "flex-start",
@@ -476,56 +520,84 @@ function App() {
         <div style={{ display: "flex", gap: "0.7rem", marginBottom: "1rem", justifyContent: "center", alignItems: "center" }}>
           <button
             style={{
-              padding: "0.4rem 1rem",
+              padding: "0.5rem 1rem",
+              minWidth: "6rem",
               borderRadius: "999px",
               border: "none",
-              background: "#fed6e3",
-              color: "#333",
-              fontWeight: 500,
-              fontSize: "0.95rem",
+              background: isDarkMode 
+                ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                : "linear-gradient(135deg, #fed6e3, #a8edea)",
+              color: isDarkMode ? "#fff" : "#333",
+              fontWeight: 600,
+              fontSize: "0.9rem",
               cursor: "pointer",
-              boxShadow: "0 1px 4px #eee",
-              transition: "background 0.2s",
+              boxShadow: isDarkMode
+                ? "0 4px 12px rgba(0,0,0,0.2)"
+                : "0 4px 12px rgba(0,0,0,0.1)",
+              transition: "all 0.3s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              justifyContent: "center"
             }}
             onClick={handleClearChat}
           >
-            🗑️ Clear Chat
+            <span>🗑️</span>
+            <span>Clear Chat</span>
           </button>
           <button
             style={{
-              padding: "0.4rem 1rem",
+              padding: "0.5rem 1rem",
+              minWidth: "6rem",
               borderRadius: "999px",
               border: "none",
-              background: "#a8edea",
-              color: "#333",
-              fontWeight: 500,
-              fontSize: "0.95rem",
+              background: isDarkMode 
+                ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                : "linear-gradient(135deg, #fed6e3, #a8edea)",
+              color: isDarkMode ? "#fff" : "#333",
+              fontWeight: 600,
+              fontSize: "0.9rem",
               cursor: "pointer",
-              boxShadow: "0 1px 4px #eee",
-              transition: "background 0.2s",
+              boxShadow: isDarkMode
+                ? "0 4px 12px rgba(0,0,0,0.2)"
+                : "0 4px 12px rgba(0,0,0,0.1)",
+              transition: "all 0.3s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              justifyContent: "center"
             }}
             onClick={handleExportChat}
           >
-            📄 Export Chat
+            <span>📄</span>
+            <span>Download</span>
           </button>
           <button
             style={{
-              padding: "0.4rem 1rem",
+              padding: "0.5rem 1rem",
+              minWidth: "6rem",
               borderRadius: "999px",
               border: "none",
-              background: isDarkMode ? "#2d2d2d" : "#fff",
+              background: isDarkMode 
+                ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                : "linear-gradient(135deg, #fed6e3, #a8edea)",
               color: isDarkMode ? "#fff" : "#333",
-              fontWeight: 500,
-              fontSize: "0.95rem",
+              fontWeight: 600,
+              fontSize: "0.9rem",
               cursor: "pointer",
               boxShadow: isDarkMode
-                ? "0 1px 4px rgba(0,0,0,0.2)"
-                : "0 1px 4px #eee",
-              transition: "background 0.2s",
+                ? "0 4px 12px rgba(0,0,0,0.2)"
+                : "0 4px 12px rgba(0,0,0,0.1)",
+              transition: "all 0.3s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              justifyContent: "center"
             }}
             onClick={() => setIsDarkMode(!isDarkMode)}
           >
-            {isDarkMode ? "🌞 Light" : "🌙 Dark"}
+            <span>{isDarkMode ? "🌞" : "🌙"}</span>
+            <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
         </div>
         <div style={chatWindow} ref={chatRef}>
@@ -686,11 +758,96 @@ function App() {
             <button
               type="button"
               style={{ ...buttonStyle, padding: "0.7rem", fontSize: "1.2rem" }}
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEmojiPicker(!showEmojiPicker);
+                setShowLanguagePicker(false);
+              }}
               aria-label="Pick emoji"
             >
               😊
             </button>
+                          <div style={{ position: "relative" }} className="language-picker">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLanguagePicker(!showLanguagePicker);
+                  setShowEmojiPicker(false);
+                }}
+                style={{
+                  padding: "0.5rem",
+                  width: "2.5rem",
+                  borderRadius: "999px",
+                  border: "none",
+                  background: isDarkMode 
+                    ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                    : "linear-gradient(135deg, #fed6e3, #a8edea)",
+                  color: isDarkMode ? "#fff" : "#333",
+                  fontWeight: 600,
+                  fontSize: "1rem",
+                  cursor: "pointer",
+                  boxShadow: isDarkMode
+                    ? "0 4px 12px rgba(0,0,0,0.2)"
+                    : "0 4px 12px rgba(0,0,0,0.1)",
+                  transition: "all 0.3s ease",
+                }}
+              >
+                {selectedLanguage === 'en' ? '🌐' : '🔄'}
+              </button>
+              {showLanguagePicker && (
+                <div style={{
+                  position: "absolute",
+                  bottom: "3.5rem",
+                  right: 0,
+                  background: isDarkMode ? "#2d2d2d" : "#fff",
+                  border: isDarkMode ? "1px solid #404040" : "1px solid #eee",
+                  borderRadius: "10px",
+                  boxShadow: isDarkMode 
+                    ? "0 2px 8px rgba(0,0,0,0.2)"
+                    : "0 2px 8px #eee",
+                  padding: "0.5rem",
+                  display: "flex",
+                  flexDirection: "column" as const,
+                  gap: "0.3rem",
+                  zIndex: 10,
+                  maxHeight: "200px",
+                  overflowY: "auto" as const,
+                  width: "150px"
+                }}>
+                  {Object.entries(languages).map(([code, name]) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        setSelectedLanguage(code);
+                        localStorage.setItem("selectedLanguage", code);
+                        setShowLanguagePicker(false);
+                      }}
+                      style={{
+                        fontSize: "0.9rem",
+                        padding: "0.5rem",
+                        background: selectedLanguage === code 
+                          ? (isDarkMode ? "#404040" : "#f0f0f0")
+                          : "none",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        color: isDarkMode ? "#fff" : "#333",
+                        textAlign: "left" as const,
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem"
+                      }}
+                    >
+                      <span>{code === 'en' ? '🌐' : '🔄'}</span>
+                      <span>{name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button 
               type="button"
               style={{
@@ -711,7 +868,7 @@ function App() {
               <span role="img" aria-label="send">📤</span>
             </button>
             {showEmojiPicker && (
-              <div style={{ position: "absolute", bottom: "3.5rem", left: 0, background: "#fff", border: "1px solid #eee", borderRadius: "10px", boxShadow: "0 2px 8px #eee", padding: "0.5rem", display: "flex", gap: "0.3rem", zIndex: 10 }}>
+              <div className="emoji-picker" style={{ position: "absolute", bottom: "3.5rem", left: 0, background: isDarkMode ? "#2d2d2d" : "#fff", border: isDarkMode ? "1px solid #404040" : "1px solid #eee", borderRadius: "10px", boxShadow: isDarkMode ? "0 2px 8px rgba(0,0,0,0.2)" : "0 2px 8px #eee", padding: "0.5rem", display: "flex", gap: "0.3rem", zIndex: 10 }}>
                 {emojis.map((emoji) => (
                   <button
                     key={emoji}

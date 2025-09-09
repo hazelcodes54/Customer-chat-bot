@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+openai
+python-dotenv
+transformers
+langdetect
+deep-translator
+torch
+sqlite3

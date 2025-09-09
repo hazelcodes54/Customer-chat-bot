@@ -11,6 +11,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from transformers import pipeline
 from collections import defaultdict
+from langdetect import detect
+from deep_translator import GoogleTranslator
 
 analytics = {
     "conversation_count": 0,
@@ -162,32 +164,53 @@ def track_order(order_id: str):
 # --------------------------
 # AI fallback
 # --------------------------
-def ask_ai(prompt: str):
+def ask_ai(prompt: str, original_lang: str = 'en'):
     # 1. Try OpenAI if key is available
     if client:
         try:
             print("Using OpenAI for response.")
+            # Always ask in English for consistent responses
+            eng_prompt = prompt if original_lang == 'en' else translate_text(prompt, 'en')
+            
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a helpful customer support assistant."},
-                    {"role": "user", "content": f"The user asked: {prompt}"}
+                    {"role": "user", "content": eng_prompt}
                 ]
             )
-            return response.choices[0].message.content
+            response_text = response.choices[0].message.content
+            
+            # Translate response back to original language if needed
+            if original_lang != 'en':
+                print(f"Translating response to {original_lang}")
+                response_text = translate_text(response_text, original_lang)
+            return response_text
         except Exception as e:
             print(f"⚠️ OpenAI error: {e}")
 
     # 2. Hugging Face fallback (DialoGPT-small)
     try:
         print("Using HuggingFace for response.")
-        hf_prompt = f"You are a helpful assistant. The user asked: {prompt}"
-        response = qa_model(hf_prompt, max_length=40, num_return_sequences=1)
+        # Use English for the model
+        eng_prompt = prompt if original_lang == 'en' else translate_text(prompt, 'en')
+        response = qa_model(eng_prompt, max_length=100, num_return_sequences=1)
+        
         if isinstance(response, list) and 'generated_text' in response[0]:
-            return response[0]['generated_text']
-        return str(response)
+            # Use a default customer service response instead of DialoGPT's creative responses
+            response_text = "Hello! I'm your customer support assistant. How may I help you today?"
+            
+            # Translate response back to original language if needed
+            if original_lang != 'en':
+                print(f"Translating response to {original_lang}")
+                response_text = translate_text(response_text, original_lang)
+            return response_text
+            
+        default_response = "Hi! How can I help you today?"
+        return translate_text(default_response, original_lang) if original_lang != 'en' else default_response
     except Exception as e:
-        return f"⚠️ HuggingFace error: {e}"
+        error_msg = f"⚠️ HuggingFace error: {e}"
+        return translate_text(error_msg, original_lang) if original_lang != 'en' else error_msg
 
 
 @app.get("/")
@@ -205,13 +228,74 @@ def home():
 # Chatbot route
 # --------------------------
 
+# Define supported languages and their greetings
+SUPPORTED_LANGUAGES = {
+    'en': 'Hello! How may I assist you today?',
+    'fr': 'Bonjour! Comment puis-je vous aider aujourd\'hui?',
+    'es': '¡Hola! ¿Cómo puedo ayudarte hoy?',
+    'de': 'Hallo! Wie kann ich Ihnen heute helfen?',
+    'it': 'Ciao! Come posso aiutarti oggi?',
+    'pt': 'Olá! Como posso ajudá-lo hoje?',
+    'nl': 'Hallo! Hoe kan ik u vandaag helpen?',
+    'ru': 'Здравствуйте! Как я могу вам помочь сегодня?',
+    'zh': '你好！今天我能为您做些什么？',
+    'ja': 'こんにちは！今日はどのようにお手伝いできますか？',
+    'ko': '안녕하세요! 오늘 어떻게 도와드릴까요?',
+    'ar': 'مرحباً! كيف يمكنني مساعدتك اليوم؟',
+    'hi': 'नमस्ते! आज मैं आपकी कैसे सहायता कर सकता हूं?'
+}
+
+def translate_text(text: str, target_lang: str = 'en') -> str:
+    """Translate text to target language."""
+    if not text or target_lang == 'en':
+        return text
+        
+    # If it's a greeting and we have a pre-defined translation, use that
+    if text.lower() in [v.lower() for v in SUPPORTED_LANGUAGES.values()]:
+        return SUPPORTED_LANGUAGES.get(target_lang, SUPPORTED_LANGUAGES['en'])
+        
+    try:
+        translator = GoogleTranslator(source='auto', target=target_lang)
+        translated = translator.translate(text)
+        print(f"Translated '{text}' to {target_lang}: '{translated}'")
+        return translated
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return text
+
+def detect_language(text: str) -> str:
+    """Detect the language of the input text."""
+    try:
+        detected = detect(text)
+        # If detected language is supported, use it; otherwise fall back to English
+        return detected if detected in SUPPORTED_LANGUAGES else 'en'
+    except:
+        return 'en'
+
 @app.get("/ask")
-def ask(question: str, user_id: str = "default"):
+def ask(question: str, user_id: str = "default", target_lang: str = None):
+    # Detect the input language
+    detected_lang = detect_language(question)
+    original_question = question
+    
+    # Translate question to English if it's not in English
+    if detected_lang != 'en':
+        question = translate_text(question, 'en')
+    
     # First check FAQ database
     faq_answer = get_answer(question)
     if faq_answer:
         print("FAQ answer found, returning...")
-        return {"question": question, "answer": faq_answer}
+        # Translate answer back to original language if needed
+        if target_lang and target_lang != 'en':
+            faq_answer = translate_text(faq_answer, target_lang)
+        elif detected_lang != 'en':
+            faq_answer = translate_text(faq_answer, detected_lang)
+        return {
+            "question": original_question,
+            "answer": faq_answer,
+            "detected_language": detected_lang
+        }
     
     # Show welcome message if conversation just started
     if question.strip().lower() in ["", "start", "begin", "welcome"]:
@@ -240,32 +324,89 @@ def ask(question: str, user_id: str = "default"):
             return response
     # 1. Custom professional responses (partial match)
     custom_responses = {
-        "hello": "Hi there! How can I help you today?",
-        "hello!": "Hi there! How can I help you today?",
-        "hey!": "Hi there! How can I help you today?",
+        # Greetings in different languages
+        "hello": SUPPORTED_LANGUAGES['en'],
+        "hi": SUPPORTED_LANGUAGES['en'],
+        "hey": SUPPORTED_LANGUAGES['en'],
+        "bonjour": SUPPORTED_LANGUAGES['fr'],
+        "salut": SUPPORTED_LANGUAGES['fr'],
+        "hola": SUPPORTED_LANGUAGES['es'],
+        "ciao": SUPPORTED_LANGUAGES['it'],
+        "hallo": SUPPORTED_LANGUAGES['de'],
+        "guten tag": SUPPORTED_LANGUAGES['de'],
+        "olá": SUPPORTED_LANGUAGES['pt'],
+        "здравствуйте": SUPPORTED_LANGUAGES['ru'],
+        "привет": SUPPORTED_LANGUAGES['ru'],
+        "你好": SUPPORTED_LANGUAGES['zh'],
+        "こんにちは": SUPPORTED_LANGUAGES['ja'],
+        "안녕하세요": SUPPORTED_LANGUAGES['ko'],
+        "مرحبا": SUPPORTED_LANGUAGES['ar'],
+        "नमस्ते": SUPPORTED_LANGUAGES['hi'],
+        
+        # Help requests
         "can you help": "Absolutely! Please tell me more about your issue.",
         "i need more help": "I'm here to assist you. Could you please describe your problem in detail?",
-        "thank you": "You're welcome! If you have any more questions, feel free to ask.",
-        "thanks": "You're welcome!",
         "help": "Sure, I'm here to help. What do you need assistance with?",
+        "i need help": "I'm here to help! What can I assist you with?",
+        "aide": "I'm here to help! What can I assist you with?",
+        "ayuda": "I'm here to help! What can I assist you with?",
+        
+        # Thanks
+        "thank": "You're welcome! If you have any more questions, feel free to ask.",
+        "thanks": "You're welcome! Let me know if you need anything else.",
+        "merci": "You're welcome! Let me know if you need anything else.",
+        "gracias": "You're welcome! Let me know if you need anything else.",
+        "danke": "You're welcome! Let me know if you need anything else.",
+        
+        # Bot identity
         "who are you": "I'm your customer support assistant, here to help you with any questions or issues.",
-        "i need some help": "I'm happy to help! Please provide more details about your issue.",
-        "how are you": "I'm just a bot, but I'm here to help you! How can I assist you today?",
-        "what can you do": "I can answer questions about your orders, our policies, and provide support. How can I help?",
+        "what are you": "I'm your customer support assistant, ready to help with orders, products, and support.",
+        
+        # Capabilities
+        "what can you do": "I can help you with:\n- Tracking orders\n- Product information\n- General support\n- Technical assistance\nWhat would you like help with?",
     }
-    for key, resp in custom_responses.items():
-        if key in q:
-            print(f"Custom response sent for key: {key}")
-            return {"question": question, "answer": resp}
+    
+    # Get the appropriate response and translate if needed
+    for key, response in custom_responses.items():
+        if key.lower() in q.lower():
+            print(f"Custom response matched for key: {key}")
+            if detected_lang != 'en':
+                translated_response = translate_text(response, detected_lang)
+                print(f"Translating response to {detected_lang}: {translated_response}")
+                return {"question": original_question, "answer": translated_response, "detected_language": detected_lang}
+            return {"question": original_question, "answer": response, "detected_language": "en"}
 
     # --- Order tracking ---
-    # First check for general order inquiries
-    order_keywords = ["order", "package", "delivery", "shipped", "shipping"]
-    if any(keyword in question.lower() for keyword in order_keywords):
+    # Keywords in different languages
+    order_keywords = {
+        'en': ["order", "package", "delivery", "shipped", "shipping", "track", "where"],
+        'fr': ["commande", "colis", "livraison", "expédié", "expédition", "suivi", "où"],
+        'es': ["pedido", "paquete", "entrega", "enviado", "envío", "seguimiento", "dónde"],
+        'de': ["bestellung", "paket", "lieferung", "versand", "sendung", "tracking", "wo"],
+        'it': ["ordine", "pacco", "consegna", "spedito", "spedizione", "tracciamento", "dove"],
+        'pt': ["pedido", "pacote", "entrega", "enviado", "envio", "rastreamento", "onde"],
+        'nl': ["bestelling", "pakket", "levering", "verzonden", "verzending", "tracking", "waar"],
+        'ru': ["заказ", "посылка", "доставка", "отправлено", "отправка", "отслеживание", "где"],
+        'zh': ["订单", "包裹", "发货", "运送", "快递", "跟踪", "在哪里"],
+        'ja': ["注文", "荷物", "配送", "発送", "配達", "追跡", "どこ"],
+        'ko': ["주문", "소포", "배송", "발송", "배달", "추적", "어디"],
+        'ar': ["طلب", "حزمة", "توصيل", "شحن", "تتبع", "أين"],
+        'hi': ["ऑर्डर", "पैकेज", "डिलीवरी", "भेजा", "शिपिंग", "ट्रैक", "कहाँ"]
+    }
+    
+    # Check for order-related keywords in detected language
+    lang_keywords = order_keywords.get(detected_lang, order_keywords['en'])
+    eng_question = question.lower() if detected_lang == 'en' else translate_text(question.lower(), 'en')
+    
+    if any(keyword in question.lower() for keyword in lang_keywords):
         if not re.search(r"(SH\d+)", question.upper()):
+            response = "To track your order, please provide your order number (it starts with 'SH'). For example: SH123"
+            if detected_lang != 'en':
+                response = translate_text(response, detected_lang)
             return {
-                "question": question,
-                "answer": "To track your order, please provide your order number (it starts with 'SH'). For example: SH123"
+                "question": original_question,
+                "answer": response,
+                "detected_language": detected_lang
             }
     
     # Check for specific order number
@@ -277,15 +418,39 @@ def ask(question: str, user_id: str = "default"):
             order_details = track_order(order_id)
             if order_details:
                 print(f"Order tracking found for {order_id}")
-                order_response = f"Here are the details for order {order_id}:\n"
-                order_response += f"Status: {order_details['status']}\n"
-                order_response += f"Items: {order_details['items']}\n"
-                order_response += f"Total: ${order_details['total_price']:.2f}\n"
-                order_response += f"Shipping to: {order_details['shipping_address']}"
-                return {"question": question, "answer": order_response, "order": order_details}
+                if detected_lang == 'en':
+                    order_response = f"Here are the details for order {order_id}:\n"
+                    order_response += f"Status: {order_details['status']}\n"
+                    order_response += f"Items: {order_details['items']}\n"
+                    order_response += f"Total: ${order_details['total_price']:.2f}\n"
+                    order_response += f"Shipping to: {order_details['shipping_address']}"
+                else:
+                    # Translate status and compose response in detected language
+                    translated_status = translate_text(order_details['status'], detected_lang)
+                    translated_items = translate_text(order_details['items'], detected_lang)
+                    translated_address = translate_text(order_details['shipping_address'], detected_lang)
+                    
+                    order_response = translate_text(f"Here are the details for order {order_id}:", detected_lang) + "\n"
+                    order_response += translate_text("Status", detected_lang) + f": {translated_status}\n"
+                    order_response += translate_text("Items", detected_lang) + f": {translated_items}\n"
+                    order_response += translate_text("Total", detected_lang) + f": ${order_details['total_price']:.2f}\n"
+                    order_response += translate_text("Shipping to", detected_lang) + f": {translated_address}"
+                
+                return {
+                    "question": original_question,
+                    "answer": order_response,
+                    "order": order_details,
+                    "detected_language": detected_lang
+                }
             else:
                 answer = f"Sorry, I couldn't find any information for order {order_id}. Please check if the order number is correct."
-                return {"question": question, "answer": answer}
+                if detected_lang != 'en':
+                    answer = translate_text(answer, detected_lang)
+                return {
+                    "question": original_question,
+                    "answer": answer,
+                    "detected_language": detected_lang
+                }
         except Exception as e:
             print(f"Error tracking order: {e}")
             return {"question": question, "answer": "Sorry, there was an error retrieving your order information. Please try again."}
@@ -346,17 +511,33 @@ def ask(question: str, user_id: str = "default"):
     def ai_call():
         try:
             print("Calling AI fallback...")
-            result["value"] = ask_ai(question)
+            result["value"] = ask_ai(question, detected_lang)
         except Exception as e:
             print(f"AI call error: {e}")
-            result["value"] = "Sorry, there was an error with the AI response."
+            error_msg = "Sorry, there was an error with the AI response."
+            result["value"] = translate_text(error_msg, detected_lang) if detected_lang != 'en' else error_msg
     t = threading.Thread(target=ai_call)
     t.start()
     t.join(timeout=8)  # 8 seconds timeout
     if t.is_alive():
         print("AI call timed out.")
-        response = {"question": question, "answer": "Sorry, the bot is taking too long to reply. Please try again."}
+        response = {
+            "question": original_question,
+            "answer": "Sorry, the bot is taking too long to reply. Please try again.",
+            "detected_language": detected_lang
+        }
         return response
     print(f"AI response: {result['value']}")
     answer = result["value"] or "Sorry, I don't have an answer for that."
-    return {"question": question, "answer": answer}
+    
+    # Translate answer back to original language if needed
+    if target_lang and target_lang != 'en':
+        answer = translate_text(answer, target_lang)
+    elif detected_lang != 'en':
+        answer = translate_text(answer, detected_lang)
+    
+    return {
+        "question": original_question,
+        "answer": answer,
+        "detected_language": detected_lang
+    }
