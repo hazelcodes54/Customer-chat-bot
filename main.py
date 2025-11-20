@@ -1,5 +1,5 @@
 # --------------------------
-# Analytics logging
+# Imports
 # --------------------------
 import collections
 import sqlite3
@@ -26,18 +26,7 @@ analytics = {
     "conversation_count": 0,
     "faq_hits": collections.Counter()
 }
-import sqlite3
-from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
-import sqlite3, os, re
-from dotenv import load_dotenv
-from transformers import pipeline
-from collections import defaultdict
 
-app = FastAPI()
-user_context = defaultdict(dict)  # user/session -> context
-
-# Use mock data instead of real integrations
 app = FastAPI()
 user_context = defaultdict(dict)
 
