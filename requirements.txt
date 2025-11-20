@@ -6,4 +6,3 @@ transformers
 langdetect
 deep-translator
 torch
-sqlite3

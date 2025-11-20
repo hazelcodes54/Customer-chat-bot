@@ -5,12 +5,21 @@ import collections
 import sqlite3
 import os
 import re
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from dotenv import load_dotenv
 from transformers import pipeline
 from collections import defaultdict
+from datetime import datetime
+import asyncio
+
+from mock_data import (
+    MOCK_ORDERS,
+    MOCK_INVENTORY,
+    create_mock_ticket,
+    mock_analytics
+)
 from langdetect import detect
 from deep_translator import GoogleTranslator
 
@@ -29,21 +38,73 @@ from collections import defaultdict
 app = FastAPI()
 user_context = defaultdict(dict)  # user/session -> context
 
+# Use mock data instead of real integrations
+app = FastAPI()
+user_context = defaultdict(dict)
+
 # --------------------------
-# Support ticket endpoint
+# Real-world endpoints
 # --------------------------
+
 @app.post("/support_ticket")
 async def support_ticket(request: Request):
+    start_time = datetime.now()
     data = await request.json()
     email = data.get("email")
     issue = data.get("issue")
-    con = sqlite3.connect("faq.db")
-    cur = con.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS support_tickets (id INTEGER PRIMARY KEY, email TEXT, issue TEXT)")
-    cur.execute("INSERT INTO support_tickets (email, issue) VALUES (?, ?)", (email, issue))
-    con.commit()
-    con.close()
-    return {"status": "success"}
+    
+    # Create mock ticket
+    ticket_id = create_mock_ticket(email, issue)
+    
+    # Track in analytics
+    response_time = (datetime.now() - start_time).total_seconds()
+    mock_analytics.add_interaction(
+        query=issue,
+        response_time=response_time,
+        resolved=True
+    )
+    
+    return {
+        "status": "success", 
+        "ticket_id": ticket_id,
+        "message": "We've received your support request and will contact you soon."
+    }
+
+@app.get("/order/{order_id}")
+async def get_order_details(order_id: str):
+    # Get order from mock data
+    order = MOCK_ORDERS.get(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Track in analytics
+    mock_analytics.add_interaction(
+        query=f"Order lookup: {order_id}",
+        response_time=0.5,
+        resolved=True
+    )
+    
+    return order
+
+@app.get("/inventory/{product_id}")
+async def check_inventory(product_id: str):
+    # Get inventory from mock data
+    inventory = MOCK_INVENTORY.get(product_id)
+    if not inventory:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Track in analytics
+    mock_analytics.add_interaction(
+        query=f"Inventory check: {product_id}",
+        response_time=0.3,
+        resolved=True
+    )
+    
+    return inventory
+
+@app.get("/metrics")
+async def get_business_metrics():
+    return mock_analytics.get_analytics()
 
 # Load environment variables (from .env file)
 load_dotenv()
@@ -249,11 +310,7 @@ def translate_text(text: str, target_lang: str = 'en') -> str:
     """Translate text to target language."""
     if not text or target_lang == 'en':
         return text
-        
-    # If it's a greeting and we have a pre-defined translation, use that
-    if text.lower() in [v.lower() for v in SUPPORTED_LANGUAGES.values()]:
-        return SUPPORTED_LANGUAGES.get(target_lang, SUPPORTED_LANGUAGES['en'])
-        
+    
     try:
         translator = GoogleTranslator(source='auto', target=target_lang)
         translated = translator.translate(text)
@@ -274,27 +331,28 @@ def detect_language(text: str) -> str:
 
 @app.get("/ask")
 def ask(question: str, user_id: str = "default", target_lang: str = None):
-    # Detect the input language
-    detected_lang = detect_language(question)
-    original_question = question
+    # Use target_lang if provided, otherwise default to English
+    # Don't auto-detect language to avoid unwanted translations
+    if not target_lang:
+        target_lang = 'en'
     
-    # Translate question to English if it's not in English
-    if detected_lang != 'en':
-        question = translate_text(question, 'en')
+    original_question = question
+    print(f"Question: {question}, Target language: {target_lang}")
     
     # First check FAQ database
     faq_answer = get_answer(question)
     if faq_answer:
         print("FAQ answer found, returning...")
-        # Translate answer back to original language if needed
-        if target_lang and target_lang != 'en':
+        # Only translate if target_lang is not English
+        if target_lang != 'en':
             faq_answer = translate_text(faq_answer, target_lang)
-        elif detected_lang != 'en':
-            faq_answer = translate_text(faq_answer, detected_lang)
+            print(f"Translating FAQ to requested language: {target_lang}")
+        else:
+            print("Keeping FAQ response in English")
         return {
             "question": original_question,
             "answer": faq_answer,
-            "detected_language": detected_lang
+            "detected_language": target_lang
         }
     
     # Show welcome message if conversation just started
@@ -370,10 +428,12 @@ def ask(question: str, user_id: str = "default", target_lang: str = None):
     for key, response in custom_responses.items():
         if key.lower() in q.lower():
             print(f"Custom response matched for key: {key}")
-            if detected_lang != 'en':
-                translated_response = translate_text(response, detected_lang)
-                print(f"Translating response to {detected_lang}: {translated_response}")
-                return {"question": original_question, "answer": translated_response, "detected_language": detected_lang}
+            # Only translate if target_lang is not English
+            if target_lang != 'en':
+                translated_response = translate_text(response, target_lang)
+                print(f"Translating to requested language {target_lang}: {translated_response}")
+                return {"question": original_question, "answer": translated_response, "detected_language": target_lang}
+            print("Keeping response in English")
             return {"question": original_question, "answer": response, "detected_language": "en"}
 
     # --- Order tracking ---
@@ -394,19 +454,19 @@ def ask(question: str, user_id: str = "default", target_lang: str = None):
         'hi': ["ऑर्डर", "पैकेज", "डिलीवरी", "भेजा", "शिपिंग", "ट्रैक", "कहाँ"]
     }
     
-    # Check for order-related keywords in detected language
-    lang_keywords = order_keywords.get(detected_lang, order_keywords['en'])
-    eng_question = question.lower() if detected_lang == 'en' else translate_text(question.lower(), 'en')
+    # Check for order-related keywords
+    lang_keywords = order_keywords.get(target_lang, order_keywords['en'])
     
     if any(keyword in question.lower() for keyword in lang_keywords):
         if not re.search(r"(SH\d+)", question.upper()):
-            response = "To track your order, please provide your order number (it starts with 'SH'). For example: SH123"
-            if detected_lang != 'en':
-                response = translate_text(response, detected_lang)
+            # Always respond in English unless target_lang is set to something else
+            response = "Go to your Account > Orders > Track or provide your order number (starts with 'SH'). For example: SH123"
+            if target_lang != 'en':
+                response = translate_text(response, target_lang)
             return {
                 "question": original_question,
                 "answer": response,
-                "detected_language": detected_lang
+                "detected_language": target_lang
             }
     
     # Check for specific order number
@@ -415,41 +475,45 @@ def ask(question: str, user_id: str = "default", target_lang: str = None):
         try:
             order_id = order_match.group(1)
             user_context[user_id]['last_order'] = order_id
-            order_details = track_order(order_id)
+            
+            # Try getting order from mock data first
+            from mock_data import MOCK_ORDERS
+            order_details = MOCK_ORDERS.get(order_id)
+            
+            # Fallback to database if not in mock data
+            if not order_details:
+                order_details = track_order(order_id)
+                
             if order_details:
                 print(f"Order tracking found for {order_id}")
-                if detected_lang == 'en':
-                    order_response = f"Here are the details for order {order_id}:\n"
-                    order_response += f"Status: {order_details['status']}\n"
-                    order_response += f"Items: {order_details['items']}\n"
-                    order_response += f"Total: ${order_details['total_price']:.2f}\n"
-                    order_response += f"Shipping to: {order_details['shipping_address']}"
-                else:
-                    # Translate status and compose response in detected language
-                    translated_status = translate_text(order_details['status'], detected_lang)
-                    translated_items = translate_text(order_details['items'], detected_lang)
-                    translated_address = translate_text(order_details['shipping_address'], detected_lang)
-                    
-                    order_response = translate_text(f"Here are the details for order {order_id}:", detected_lang) + "\n"
-                    order_response += translate_text("Status", detected_lang) + f": {translated_status}\n"
-                    order_response += translate_text("Items", detected_lang) + f": {translated_items}\n"
-                    order_response += translate_text("Total", detected_lang) + f": ${order_details['total_price']:.2f}\n"
-                    order_response += translate_text("Shipping to", detected_lang) + f": {translated_address}"
+                # English response format
+                order_response = f"Here are the details for order {order_id}:\n"
+                order_response += f"Status: {order_details['status']}\n"
+                order_response += f"Items: {order_details['items']}\n"
+                order_response += f"Total: ${order_details['total_price']:.2f}\n"
+                order_response += f"Shipping to: {order_details['shipping_address']}\n"
+                if order_details.get('tracking_number'):
+                    order_response += f"Tracking Number: {order_details['tracking_number']}"
+                
+                # Only translate if target language is not English
+                if target_lang != 'en':
+                    print(f"Translating English response to target language: {target_lang}")
+                    order_response = translate_text(order_response, target_lang)
                 
                 return {
                     "question": original_question,
                     "answer": order_response,
                     "order": order_details,
-                    "detected_language": detected_lang
+                    "detected_language": target_lang
                 }
             else:
                 answer = f"Sorry, I couldn't find any information for order {order_id}. Please check if the order number is correct."
-                if detected_lang != 'en':
-                    answer = translate_text(answer, detected_lang)
+                if target_lang != 'en':
+                    answer = translate_text(answer, target_lang)
                 return {
                     "question": original_question,
                     "answer": answer,
-                    "detected_language": detected_lang
+                    "detected_language": target_lang
                 }
         except Exception as e:
             print(f"Error tracking order: {e}")
@@ -511,11 +575,19 @@ def ask(question: str, user_id: str = "default", target_lang: str = None):
     def ai_call():
         try:
             print("Calling AI fallback...")
-            result["value"] = ask_ai(question, detected_lang)
+            # Use target_lang for AI response
+            if target_lang != 'en':
+                result["value"] = ask_ai(question, target_lang)
+            else:
+                result["value"] = ask_ai(question, 'en')
         except Exception as e:
             print(f"AI call error: {e}")
             error_msg = "Sorry, there was an error with the AI response."
-            result["value"] = translate_text(error_msg, detected_lang) if detected_lang != 'en' else error_msg
+            # Translate error message if needed
+            if target_lang != 'en':
+                result["value"] = translate_text(error_msg, target_lang)
+            else:
+                result["value"] = error_msg
     t = threading.Thread(target=ai_call)
     t.start()
     t.join(timeout=8)  # 8 seconds timeout
@@ -524,20 +596,18 @@ def ask(question: str, user_id: str = "default", target_lang: str = None):
         response = {
             "question": original_question,
             "answer": "Sorry, the bot is taking too long to reply. Please try again.",
-            "detected_language": detected_lang
+            "detected_language": target_lang
         }
         return response
     print(f"AI response: {result['value']}")
     answer = result["value"] or "Sorry, I don't have an answer for that."
     
-    # Translate answer back to original language if needed
-    if target_lang and target_lang != 'en':
+    # Translate answer if target language is not English
+    if target_lang != 'en':
         answer = translate_text(answer, target_lang)
-    elif detected_lang != 'en':
-        answer = translate_text(answer, detected_lang)
     
     return {
         "question": original_question,
         "answer": answer,
-        "detected_language": detected_lang
+        "detected_language": target_lang
     }

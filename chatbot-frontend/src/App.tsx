@@ -11,6 +11,52 @@ const TypingIndicator = () => (
 );
 
 function App() {
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    const completed = localStorage.getItem("onboardingCompleted");
+    return !completed;
+  });
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  // Onboarding slides
+  const onboardingSlides = [
+    {
+      icon: "👋",
+      title: "Welcome to Customer Support Chat",
+      description: "Get instant help with your orders, products, and questions 24/7"
+    },
+    {
+      icon: "📦",
+      title: "Track Your Orders",
+      description: "Simply type your order number (e.g., SH123) to get real-time tracking updates"
+    },
+    {
+      icon: "🌍",
+      title: "Multi-Language Support",
+      description: "Chat in your preferred language! We support 15+ languages including English, Spanish, French, German, and more"
+    },
+    {
+      icon: "🎯",
+      title: "Quick Answers",
+      description: "Ask about products, returns, policies, or anything else. Our bot is here to help!"
+    }
+  ];
+
+  const handleNextSlide = () => {
+    if (currentSlide < onboardingSlides.length - 1) {
+      setCurrentSlide(currentSlide + 1);
+    } else {
+      // Complete onboarding
+      localStorage.setItem("onboardingCompleted", "true");
+      setShowOnboarding(false);
+    }
+  };
+
+  const skipOnboarding = () => {
+    localStorage.setItem("onboardingCompleted", "true");
+    setShowOnboarding(false);
+  };
+
   // Dark mode state
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem("darkMode");
@@ -104,7 +150,15 @@ function App() {
 
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = sessionStorage.getItem("chatbot_messages");
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    // Default welcome message
+    return [{
+      role: 'bot',
+      text: "👋 Welcome! I'm your customer support assistant. How can I help you today?",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }];
   });
 
   // Voice recording states
@@ -329,9 +383,14 @@ function App() {
         setHandoffActive(true);
       }
     } catch (error) {
+      console.error("API Error:", error);  // Add detailed error logging
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: "⚠️ Error: could not reach server.", timestamp: getTimestamp() },
+        { 
+          role: "bot", 
+          text: "⚠️ Error: Could not reach server. Please make sure the backend is running on http://127.0.0.1:8000", 
+          timestamp: getTimestamp() 
+        },
       ]);
     }
     setLoading(false);
@@ -363,8 +422,11 @@ function App() {
   // Styles
   const bgGradient = {
     minHeight: "100vh",
+    width: "100vw",
+    margin: 0,
+    padding: 0,
     background: isDarkMode 
-      ? "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)"
+      ? "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)"
       : "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
     display: "flex",
     alignItems: "center",
@@ -372,22 +434,23 @@ function App() {
   };
   const glassBox = {
     width: "100%",
-    maxWidth: "420px",
-    minHeight: "520px",
+    maxWidth: "480px",
+    minHeight: "600px",
     background: isDarkMode 
-      ? "rgba(30, 30, 30, 0.8)"
+      ? "rgba(25, 25, 40, 0.85)"
       : "rgba(255, 255, 255, 0.7)",
     boxShadow: isDarkMode
-      ? "0 8px 32px 0 rgba(0, 0, 0, 0.37)"
+      ? "0 8px 32px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(123, 97, 255, 0.3)"
       : "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
     borderRadius: "20px",
     border: isDarkMode
-      ? "1px solid rgba(255,255,255,0.1)"
+      ? "1px solid rgba(123, 97, 255, 0.2)"
       : "1px solid rgba(255,255,255,0.18)",
     padding: "2rem 1.5rem 1rem 1.5rem",
     display: "flex",
     flexDirection: "column" as const,
-    backdropFilter: "blur(8px)",
+    backdropFilter: "blur(12px)",
+    overflow: "hidden" as const,
   };
   const headerStyle = {
     textAlign: "center" as const,
@@ -397,7 +460,7 @@ function App() {
     color: isDarkMode ? "#fff" : "#333",
     letterSpacing: "1px",
     textShadow: isDarkMode 
-      ? "0 2px 8px rgba(0,0,0,0.5)"
+      ? "0 0 20px rgba(123, 97, 255, 0.5), 0 2px 8px rgba(0,0,0,0.5)"
       : "0 2px 8px #fff8",
   };
   const chatWindow = {
@@ -409,60 +472,67 @@ function App() {
     flexDirection: "column" as const,
     gap: "0.7rem",
     background: isDarkMode 
-      ? "rgba(40, 40, 40, 0.5)"
+      ? "rgba(20, 20, 35, 0.6)"
       : "rgba(255, 255, 255, 0.5)",
     borderRadius: "12px",
     border: isDarkMode
-      ? "1px solid #404040"
+      ? "1px solid rgba(123, 97, 255, 0.15)"
       : "1px solid #e0e0e0",
     boxShadow: isDarkMode
-      ? "0 2px 8px rgba(0,0,0,0.2)"
+      ? "inset 0 2px 8px rgba(0,0,0,0.3)"
       : "0 2px 8px #eee",
   };
   const inputArea = {
     display: "flex",
-    gap: "0.5rem",
+    gap: "0.4rem",
     alignItems: "center",
     marginTop: "0.5rem",
+    position: "relative" as const,
+    flexWrap: "nowrap" as const,
   };
   const inputStyle = {
     flex: 1,
     padding: "0.7rem 1rem",
     borderRadius: "999px",
     border: isDarkMode
-      ? "1px solid #404040"
+      ? "1px solid rgba(123, 97, 255, 0.3)"
       : "1px solid #ccc",
     fontSize: "1rem",
     outline: "none",
-    background: isDarkMode ? "#2d2d2d" : "#f9f9f9",
-    color: isDarkMode ? "#fff" : "#333",
+    background: isDarkMode ? "rgba(30, 30, 45, 0.8)" : "#f9f9f9",
+    color: isDarkMode ? "#e0e0e0" : "#333",
     boxShadow: isDarkMode
-      ? "0 1px 4px rgba(0,0,0,0.2)"
+      ? "0 2px 8px rgba(0,0,0,0.3), inset 0 1px 2px rgba(123, 97, 255, 0.1)"
       : "0 1px 4px #eee",
   };
   const buttonStyle = {
-    padding: "0.5rem",
-    width: "2.5rem",
+    padding: "0.6rem",
+    width: "2.6rem",
+    height: "2.6rem",
     borderRadius: "999px",
     border: "none",
     background: isDarkMode 
-      ? "linear-gradient(135deg, #2d2d2d, #404040)"
+      ? "linear-gradient(135deg, #7b61ff, #9c4dff)"
       : "linear-gradient(135deg, #fed6e3, #a8edea)",
     color: isDarkMode ? "#fff" : "#333",
     fontWeight: 600,
     fontSize: "1rem",
     cursor: "pointer",
     boxShadow: isDarkMode
-      ? "0 4px 12px rgba(0,0,0,0.2)"
+      ? "0 4px 15px rgba(123, 97, 255, 0.4), 0 0 20px rgba(123, 97, 255, 0.2)"
       : "0 4px 12px rgba(0,0,0,0.1)",
     transition: "all 0.3s ease",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   };
   const bubbleStyle = (role: string) => ({
     alignSelf: role === "user" ? "flex-end" : "flex-start",
     background: isDarkMode
       ? (role === "user"
-        ? "linear-gradient(135deg,#404040 60%,#2d2d2d 100%)"
-        : "linear-gradient(135deg, #2b2f3a 0%, #1e2127 100%)")
+        ? "linear-gradient(135deg, #7b61ff 0%, #9c4dff 100%)"
+        : "linear-gradient(135deg, #2d3548 0%, #1f2937 100%)")
       : (role === "user"
         ? "linear-gradient(135deg,#a8edea 60%,#fed6e3 100%)"
         : "#fff"),
@@ -471,8 +541,8 @@ function App() {
     borderRadius: role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
     boxShadow: isDarkMode
       ? (role === "bot" 
-        ? "0 4px 12px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.1)"
-        : "0 2px 8px rgba(0,0,0,0.2)")
+        ? "0 4px 12px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(123, 97, 255, 0.2)"
+        : "0 4px 15px rgba(123, 97, 255, 0.3), 0 0 20px rgba(123, 97, 255, 0.1)")
       : "0 2px 8px #e0e0e0",
     maxWidth: "80%",
     position: "relative" as const,
@@ -485,15 +555,15 @@ function App() {
     width: "32px",
     height: "32px",
     borderRadius: "50%",
-    background: isDarkMode ? "linear-gradient(135deg, #3a3f4c 0%, #2b2f3a 100%)" : "#eee",
+    background: isDarkMode ? "linear-gradient(135deg, #7b61ff 0%, #9c4dff 100%)" : "#eee",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontSize: "1.3rem",
     boxShadow: isDarkMode
-      ? "0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.1)"
+      ? "0 0 15px rgba(123, 97, 255, 0.5), 0 2px 6px rgba(0,0,0,0.3)"
       : "0 1px 4px #ccc",
-    border: isDarkMode ? "2px solid rgba(255,255,255,0.1)" : "none",
+    border: isDarkMode ? "2px solid rgba(255,255,255,0.2)" : "none",
   };
 
 
@@ -512,6 +582,111 @@ function App() {
   };
 
   return (
+    <>
+      {showOnboarding ? (
+        <div style={bgGradient}>
+          <div style={{
+            ...glassBox,
+            maxWidth: "500px",
+            minHeight: "500px",
+            display: "flex",
+            flexDirection: "column" as const,
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "3rem 2rem",
+            textAlign: "center" as const
+          }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column" as const, justifyContent: "center", alignItems: "center" }}>
+              <div style={{ 
+                fontSize: "5rem", 
+                marginBottom: "1.5rem",
+                animation: "bounceIn 0.6s ease"
+              }}>
+                {onboardingSlides[currentSlide].icon}
+              </div>
+              <h2 style={{ 
+                fontSize: "1.8rem", 
+                fontWeight: 700, 
+                marginBottom: "1rem",
+                color: isDarkMode ? "#fff" : "#333"
+              }}>
+                {onboardingSlides[currentSlide].title}
+              </h2>
+              <p style={{ 
+                fontSize: "1.1rem", 
+                lineHeight: "1.6",
+                color: isDarkMode ? "#e0e0e0" : "#666",
+                maxWidth: "400px"
+              }}>
+                {onboardingSlides[currentSlide].description}
+              </p>
+            </div>
+
+            <div style={{ width: "100%", marginTop: "2rem" }}>
+              {/* Progress dots */}
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginBottom: "1.5rem" }}>
+                {onboardingSlides.map((_, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      width: currentSlide === index ? "2rem" : "0.5rem",
+                      height: "0.5rem",
+                      borderRadius: "999px",
+                      background: currentSlide === index 
+                        ? (isDarkMode ? "#7b61ff" : "#a8edea")
+                        : (isDarkMode ? "#555" : "#ddd"),
+                      transition: "all 0.3s ease"
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+                {currentSlide > 0 && (
+                  <button
+                    onClick={skipOnboarding}
+                    style={{
+                      padding: "0.8rem 1.5rem",
+                      borderRadius: "999px",
+                      border: isDarkMode ? "1px solid rgba(255,255,255,0.2)" : "1px solid #ddd",
+                      background: "transparent",
+                      color: isDarkMode ? "#fff" : "#666",
+                      fontWeight: 600,
+                      fontSize: "1rem",
+                      cursor: "pointer",
+                      transition: "all 0.3s ease"
+                    }}
+                  >
+                    Skip
+                  </button>
+                )}
+                <button
+                  onClick={handleNextSlide}
+                  style={{
+                    padding: "0.8rem 2rem",
+                    borderRadius: "999px",
+                    border: "none",
+                    background: isDarkMode 
+                      ? "linear-gradient(135deg, #7b61ff, #9c4dff)"
+                      : "linear-gradient(135deg, #a8edea, #fed6e3)",
+                    color: isDarkMode ? "#fff" : "#333",
+                    fontWeight: 700,
+                    fontSize: "1rem",
+                    cursor: "pointer",
+                    boxShadow: isDarkMode
+                      ? "0 4px 15px rgba(123, 97, 255, 0.4)"
+                      : "0 4px 12px rgba(0,0,0,0.1)",
+                    transition: "all 0.3s ease"
+                  }}
+                >
+                  {currentSlide === onboardingSlides.length - 1 ? "Get Started 🚀" : "Next"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
     <div style={bgGradient}>
       <div style={glassBox}>
         <div style={headerStyle}>
@@ -520,19 +695,20 @@ function App() {
         <div style={{ display: "flex", gap: "0.7rem", marginBottom: "1rem", justifyContent: "center", alignItems: "center" }}>
           <button
             style={{
-              padding: "0.5rem 1rem",
+              padding: "0.6rem 1rem",
               minWidth: "6rem",
+              height: "2.8rem",
               borderRadius: "999px",
               border: "none",
               background: isDarkMode 
-                ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                ? "linear-gradient(135deg, #7b61ff, #9c4dff)"
                 : "linear-gradient(135deg, #fed6e3, #a8edea)",
               color: isDarkMode ? "#fff" : "#333",
               fontWeight: 600,
               fontSize: "0.9rem",
               cursor: "pointer",
               boxShadow: isDarkMode
-                ? "0 4px 12px rgba(0,0,0,0.2)"
+                ? "0 4px 15px rgba(123, 97, 255, 0.4), 0 0 20px rgba(123, 97, 255, 0.2)"
                 : "0 4px 12px rgba(0,0,0,0.1)",
               transition: "all 0.3s ease",
               display: "flex",
@@ -547,19 +723,20 @@ function App() {
           </button>
           <button
             style={{
-              padding: "0.5rem 1rem",
+              padding: "0.6rem 1rem",
               minWidth: "6rem",
+              height: "2.8rem",
               borderRadius: "999px",
               border: "none",
               background: isDarkMode 
-                ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                ? "linear-gradient(135deg, #7b61ff, #9c4dff)"
                 : "linear-gradient(135deg, #fed6e3, #a8edea)",
               color: isDarkMode ? "#fff" : "#333",
               fontWeight: 600,
               fontSize: "0.9rem",
               cursor: "pointer",
               boxShadow: isDarkMode
-                ? "0 4px 12px rgba(0,0,0,0.2)"
+                ? "0 4px 15px rgba(123, 97, 255, 0.4), 0 0 20px rgba(123, 97, 255, 0.2)"
                 : "0 4px 12px rgba(0,0,0,0.1)",
               transition: "all 0.3s ease",
               display: "flex",
@@ -574,19 +751,20 @@ function App() {
           </button>
           <button
             style={{
-              padding: "0.5rem 1rem",
+              padding: "0.6rem 1rem",
               minWidth: "6rem",
+              height: "2.8rem",
               borderRadius: "999px",
               border: "none",
               background: isDarkMode 
-                ? "linear-gradient(135deg, #2d2d2d, #404040)"
+                ? "linear-gradient(135deg, #7b61ff, #9c4dff)"
                 : "linear-gradient(135deg, #fed6e3, #a8edea)",
               color: isDarkMode ? "#fff" : "#333",
               fontWeight: 600,
               fontSize: "0.9rem",
               cursor: "pointer",
               boxShadow: isDarkMode
-                ? "0 4px 12px rgba(0,0,0,0.2)"
+                ? "0 4px 15px rgba(123, 97, 255, 0.4), 0 0 20px rgba(123, 97, 255, 0.2)"
                 : "0 4px 12px rgba(0,0,0,0.1)",
               transition: "all 0.3s ease",
               display: "flex",
@@ -752,12 +930,12 @@ function App() {
               style={inputStyle}
               value={input}
               onChange={e => setInput(e.target.value)}
-              placeholder="Type your question..."
+              placeholder="Ask about orders, products, or support..."
               autoFocus
             />
             <button
               type="button"
-              style={{ ...buttonStyle, padding: "0.7rem", fontSize: "1.2rem" }}
+              style={buttonStyle}
               onClick={(e) => {
                 e.stopPropagation();
                 setShowEmojiPicker(!showEmojiPicker);
@@ -767,92 +945,21 @@ function App() {
             >
               😊
             </button>
-                          <div style={{ position: "relative" }} className="language-picker">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowLanguagePicker(!showLanguagePicker);
-                  setShowEmojiPicker(false);
-                }}
-                style={{
-                  padding: "0.5rem",
-                  width: "2.5rem",
-                  borderRadius: "999px",
-                  border: "none",
-                  background: isDarkMode 
-                    ? "linear-gradient(135deg, #2d2d2d, #404040)"
-                    : "linear-gradient(135deg, #fed6e3, #a8edea)",
-                  color: isDarkMode ? "#fff" : "#333",
-                  fontWeight: 600,
-                  fontSize: "1rem",
-                  cursor: "pointer",
-                  boxShadow: isDarkMode
-                    ? "0 4px 12px rgba(0,0,0,0.2)"
-                    : "0 4px 12px rgba(0,0,0,0.1)",
-                  transition: "all 0.3s ease",
-                }}
-              >
-                {selectedLanguage === 'en' ? '🌐' : '🔄'}
-              </button>
-              {showLanguagePicker && (
-                <div style={{
-                  position: "absolute",
-                  bottom: "3.5rem",
-                  right: 0,
-                  background: isDarkMode ? "#2d2d2d" : "#fff",
-                  border: isDarkMode ? "1px solid #404040" : "1px solid #eee",
-                  borderRadius: "10px",
-                  boxShadow: isDarkMode 
-                    ? "0 2px 8px rgba(0,0,0,0.2)"
-                    : "0 2px 8px #eee",
-                  padding: "0.5rem",
-                  display: "flex",
-                  flexDirection: "column" as const,
-                  gap: "0.3rem",
-                  zIndex: 10,
-                  maxHeight: "200px",
-                  overflowY: "auto" as const,
-                  width: "150px"
-                }}>
-                  {Object.entries(languages).map(([code, name]) => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => {
-                        setSelectedLanguage(code);
-                        localStorage.setItem("selectedLanguage", code);
-                        setShowLanguagePicker(false);
-                      }}
-                      style={{
-                        fontSize: "0.9rem",
-                        padding: "0.5rem",
-                        background: selectedLanguage === code 
-                          ? (isDarkMode ? "#404040" : "#f0f0f0")
-                          : "none",
-                        border: "none",
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        color: isDarkMode ? "#fff" : "#333",
-                        textAlign: "left" as const,
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem"
-                      }}
-                    >
-                      <span>{code === 'en' ? '🌐' : '🔄'}</span>
-                      <span>{name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowLanguagePicker(!showLanguagePicker);
+                setShowEmojiPicker(false);
+              }}
+              style={buttonStyle}
+            >
+              {selectedLanguage === 'en' ? '🌐' : '🔄'}
+            </button>
             <button 
               type="button"
               style={{
                 ...buttonStyle,
-                padding: "0.7rem",
                 background: isRecording
                   ? "linear-gradient(90deg, #ff6b6b, #ff8787)"
                   : buttonStyle.background
@@ -867,6 +974,58 @@ function App() {
             <button style={buttonStyle} type="submit">
               <span role="img" aria-label="send">📤</span>
             </button>
+            {showLanguagePicker && (
+              <div style={{
+                position: "absolute",
+                bottom: "3.5rem",
+                right: "3.5rem",
+                background: isDarkMode ? "#2d2d2d" : "#fff",
+                border: isDarkMode ? "1px solid #404040" : "1px solid #eee",
+                borderRadius: "10px",
+                boxShadow: isDarkMode 
+                  ? "0 2px 8px rgba(0,0,0,0.2)"
+                  : "0 2px 8px #eee",
+                padding: "0.5rem",
+                display: "flex",
+                flexDirection: "column" as const,
+                gap: "0.3rem",
+                zIndex: 10,
+                maxHeight: "200px",
+                overflowY: "auto" as const,
+                width: "150px"
+              }}>
+                {Object.entries(languages).map(([code, name]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => {
+                      setSelectedLanguage(code);
+                      localStorage.setItem("selectedLanguage", code);
+                      setShowLanguagePicker(false);
+                    }}
+                    style={{
+                      fontSize: "0.9rem",
+                      padding: "0.5rem",
+                      background: selectedLanguage === code 
+                        ? (isDarkMode ? "#404040" : "#f0f0f0")
+                        : "none",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      color: isDarkMode ? "#fff" : "#333",
+                      textAlign: "left" as const,
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem"
+                    }}
+                  >
+                    <span>{code === 'en' ? '🌐' : '🔄'}</span>
+                    <span>{name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {showEmojiPicker && (
               <div className="emoji-picker" style={{ position: "absolute", bottom: "3.5rem", left: 0, background: isDarkMode ? "#2d2d2d" : "#fff", border: isDarkMode ? "1px solid #404040" : "1px solid #eee", borderRadius: "10px", boxShadow: isDarkMode ? "0 2px 8px rgba(0,0,0,0.2)" : "0 2px 8px #eee", padding: "0.5rem", display: "flex", gap: "0.3rem", zIndex: 10 }}>
                 {emojis.map((emoji) => (
@@ -885,6 +1044,8 @@ function App() {
         )}
       </div>
     </div>
+      )}
+    </>
   );
 }
 
