@@ -122,9 +122,12 @@ qa_model = pipeline("text-generation", model="microsoft/DialoGPT-small")
 # chat_history = Conversation()
 
 # ✅ CORS middleware
+# Allow both local development and production URLs
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Only allow frontend origin for development
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

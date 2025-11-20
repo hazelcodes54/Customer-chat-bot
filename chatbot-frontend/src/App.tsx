@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import './App.css';
 
+// API URL from environment variable or default to localhost
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 // Typing indicator component
 const TypingIndicator = () => (
   <div className="typing-indicator">
@@ -229,7 +232,7 @@ function App() {
         setLoading(true);
         try {
           const res = await fetch(
-            `http://127.0.0.1:8000/ask?question=${encodeURIComponent(transcript)}`
+            `${API_URL}/ask?question=${encodeURIComponent(transcript)}`
           );
           const data = await res.json();
           
@@ -367,7 +370,7 @@ function App() {
     setLoading(true);
     try {
       const res = await fetch(
-        `http://127.0.0.1:8000/ask?question=${encodeURIComponent(input)}&target_lang=${selectedLanguage}`
+        `${API_URL}/ask?question=${encodeURIComponent(input)}&target_lang=${selectedLanguage}`
       );
       const data = await res.json();
       // If the response contains order details, format them nicely
@@ -388,7 +391,7 @@ function App() {
         ...prev,
         { 
           role: "bot", 
-          text: "⚠️ Error: Could not reach server. Please make sure the backend is running on http://127.0.0.1:8000", 
+          text: "⚠️ Error: Could not reach server. Please make sure the backend is running.", 
           timestamp: getTimestamp() 
         },
       ]);
@@ -402,7 +405,7 @@ function App() {
     e.preventDefault();
     setHandoffSent(false);
     try {
-      const res = await fetch("http://127.0.0.1:8000/support_ticket", {
+      const res = await fetch(`${API_URL}/support_ticket`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: handoffEmail, issue: handoffIssue })
