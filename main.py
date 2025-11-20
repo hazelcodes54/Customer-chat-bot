@@ -9,7 +9,6 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from dotenv import load_dotenv
-from transformers import pipeline
 from collections import defaultdict
 from datetime import datetime
 import asyncio
@@ -113,13 +112,6 @@ load_dotenv()
 client = None
 if os.getenv("OPENAI_API_KEY"):
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Hugging Face fallback model (DialoGPT-small for chat)
-qa_model = pipeline("text-generation", model="microsoft/DialoGPT-small")
-
-
-# Keep one chat history for fallback model
-# chat_history = Conversation()
 
 # ✅ CORS middleware
 # Allow both local development and production URLs
@@ -253,24 +245,10 @@ def ask_ai(prompt: str, original_lang: str = 'en'):
         except Exception as e:
             print(f"⚠️ OpenAI error: {e}")
 
-    # 2. Hugging Face fallback (DialoGPT-small)
+    # 2. Simple fallback response
     try:
-        print("Using HuggingFace for response.")
-        # Use English for the model
-        eng_prompt = prompt if original_lang == 'en' else translate_text(prompt, 'en')
-        response = qa_model(eng_prompt, max_length=100, num_return_sequences=1)
-        
-        if isinstance(response, list) and 'generated_text' in response[0]:
-            # Use a default customer service response instead of DialoGPT's creative responses
-            response_text = "Hello! I'm your customer support assistant. How may I help you today?"
-            
-            # Translate response back to original language if needed
-            if original_lang != 'en':
-                print(f"Translating response to {original_lang}")
-                response_text = translate_text(response_text, original_lang)
-            return response_text
-            
-        default_response = "Hi! How can I help you today?"
+        print("Using default fallback response.")
+        default_response = "I'm here to help! You can ask me about order tracking, inventory, return policies, or request to speak with a human."
         return translate_text(default_response, original_lang) if original_lang != 'en' else default_response
     except Exception as e:
         error_msg = f"⚠️ HuggingFace error: {e}"
